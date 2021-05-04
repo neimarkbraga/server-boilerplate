@@ -7,24 +7,13 @@ const ServerError = require('../libs/ServerError');
 class Database {
   static models = models;
 
-  static ensureModelSchema(Model, value) {
-    const castType = (type, value) => {
-      if (Array.isArray(type) && Array.isArray(value))
-        return value.map(subValue => castType(type[0], subValue));
-
-      if (type === SchemaTypes.Date)
-        return new Date(value);
-
-      return value;
-    };
-
-    for (let key of Object.keys(Model.schema.obj)) {
-      if (value[key] !== undefined) {
-        value[key] = castType(Model.schema.obj[key].type, value[key]);
-      }
-    }
-
-    return value;
+  static populateQueryRefs(query) {
+    const { obj: schema } = query.model.schema;
+    return query.populate(Object.keys(schema).filter(key => {
+      if (Array.isArray(schema[key]))
+        return !!schema[key][0].ref;
+      return !!schema[key].ref;
+    }));
   }
 
   static expressCRUD(Model) {
@@ -35,7 +24,11 @@ class Database {
       try {
         const item = new Model(req.body);
         await item.save();
-        await res.json(item);
+
+        const query = Model.findById(item._id);
+        Database.populateQueryRefs(query);
+
+        await res.json(await query.exec());
       }
       catch (e) {
         next(e);
@@ -44,7 +37,9 @@ class Database {
 
     app.get(`/${kebabName}`, async (req, res, next) => {
       try {
-        await res.json(await Model.find(req.query));
+        const query = Model.find(req.query);
+        Database.populateQueryRefs(query);
+        await res.json(await query.exec());
       }
       catch (e) {
         next(e);
@@ -53,7 +48,10 @@ class Database {
 
     app.get(`/${kebabName}/:id`, async (req, res, next) => {
       try {
-        const item = await Model.findOne({...req.query, _id: req.params.id});
+        const query = Model.findOne({...req.query, _id: req.params.id});
+        Database.populateQueryRefs(query);
+        const item = await query.exec();
+
         item ? await res.json(item) : next();
       }
       catch (e) {
@@ -68,7 +66,11 @@ class Database {
           for (let key of Object.keys(req.body))
             item[key] = req.body[key];
           await item.save();
-          await res.json(item);
+
+          const query = Model.findById(item._id);
+          Database.populateQueryRefs(query);
+
+          await res.json(await query.exec());
         }
         else {
           next();
