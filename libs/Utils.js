@@ -4,6 +4,10 @@ class Utils {
     max = Math.floor(max);
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
+
+  static pascalToKebab(str = '') {
+    return str.split(/(?=[A-Z])/).join('-');
+  }
 }
 
 module.exports = Utils;
